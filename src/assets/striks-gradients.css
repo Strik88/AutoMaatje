@@ -1,0 +1,62 @@
+/* Striks gradiënten voor gebruik in de applicatie */
+
+/* Menselijke gradiënt: van Diep Paars naar Zonsopgang Oranje */
+.bg-gradient-human {
+  background: linear-gradient(135deg, #8A4E85 0%, #F27052 100%);
+}
+
+/* AI gradiënt: van Oceaan Blauw naar AI Turquoise */
+.bg-gradient-ai {
+  background: linear-gradient(135deg, #4B99D2 0%, #3BC5C9 100%);
+}
+
+/* Volledig spectrum gradiënt */
+.bg-gradient-full {
+  background: linear-gradient(90deg, #C64B8C 0%, #F9B854 50%, #3BC5C9 100%);
+}
+
+/* Tekst gradiënten */
+.text-gradient-human {
+  background: linear-gradient(135deg, #8A4E85 0%, #F27052 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-gradient-ai {
+  background: linear-gradient(135deg, #4B99D2 0%, #3BC5C9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+.text-gradient-full {
+  background: linear-gradient(90deg, #C64B8C 0%, #F9B854 50%, #3BC5C9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Gradiënt borders (top, right, bottom, left) */
+.border-t-gradient-human {
+  border-top: 3px solid;
+  border-image: linear-gradient(to right, #8A4E85, #F27052) 1;
+}
+
+.border-r-gradient-ai {
+  border-right: 3px solid;
+  border-image: linear-gradient(to bottom, #4B99D2, #3BC5C9) 1;
+}
+
+.border-b-gradient-full {
+  border-bottom: 3px solid;
+  border-image: linear-gradient(to right, #C64B8C, #F9B854, #3BC5C9) 1;
+}
+
+.border-l-gradient-human {
+  border-left: 3px solid;
+  border-image: linear-gradient(to bottom, #8A4E85, #F27052) 1;
+} 

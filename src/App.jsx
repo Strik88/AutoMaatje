@@ -1,46 +1,72 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import DashboardLayout from './pages/DashboardLayout';
 import HeenreisPage from './pages/HeenreisPage';
 import TerugreisPage from './pages/TerugreisPage';
-// TODO: Import authentication context or hook
+import TripsPage from './pages/TripsPage';
+import ManagePage from './pages/ManagePage';
+import { RideProvider } from './context/RideContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuthContext } from './context/AuthContext';
 
-// Placeholder for protected route logic
+// Wrapper voor beschermde routes
 const ProtectedRoute = () => {
-  // TODO: Replace with actual authentication check
-  const isAuthenticated = true; // Assume user is logged in for now
+  const { user, loading } = useAuthContext();
 
-  if (!isAuthenticated) {
-    // Redirect to login if not authenticated
+  // Toon laadstatus als authenticatiestatus nog wordt geladen
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Laden...</div>
+      </div>
+    );
+  }
+
+  // Redirect naar login als niet ingelogd
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Render the nested routes (within DashboardLayout) if authenticated
+  // Render de nested routes (binnen DashboardLayout) als ingelogd
   return <Outlet />;
 };
 
-function App() {
+function AppRoutes() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-        {/* Dashboard routes wrapped in a protected route */}
+        {/* Dashboard routes wrapped in een protected route */}
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<DashboardLayout />}>
-            {/* Default dashboard view could be heenreis or a welcome page */}
-            <Route index element={<Navigate to="heenreis" replace />} />
+            {/* Default dashboard view */}
+            <Route index element={<Navigate to="/trips" replace />} />
+            <Route path="trips" element={<TripsPage />} />
             <Route path="heenreis" element={<HeenreisPage />} />
             <Route path="terugreis" element={<TerugreisPage />} />
-            {/* TODO: Add other nested routes like Settings if needed */}
+            <Route path="manage" element={<ManagePage />} />
+            {/* TODO: Voeg andere nested routes toe indien nodig */}
           </Route>
         </Route>
 
-        {/* Optional: Add a 404 Not Found route */}
+        {/* 404 Not Found route */}
         <Route path="*" element={<div>404 - Pagina Niet Gevonden</div>} />
       </Routes>
     </Router>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <RideProvider>
+        <AppRoutes />
+      </RideProvider>
+    </AuthProvider>
   );
 }
 

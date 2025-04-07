@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 import StriksLogo from '../assets/striks-logo.png';
-// TODO: Import authentication functions from Firebase setup
 
-function LoginPage() {
+function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState(null);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [registerError, setRegisterError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
-  const { login, user, loading, error } = useAuthContext();
+  const { register, user, loading, error } = useAuthContext();
 
   // Als gebruiker is ingelogd, doorsturen naar dashboard
   useEffect(() => {
@@ -22,14 +22,26 @@ function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoginError(null);
+    setRegisterError(null);
+    
+    // Validatie
+    if (password !== confirmPassword) {
+      setRegisterError('Wachtwoorden komen niet overeen');
+      return;
+    }
+    
+    if (password.length < 6) {
+      setRegisterError('Wachtwoord moet minimaal 6 tekens bevatten');
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      await login(email, password);
-      // Na succesvol inloggen stuurt useEffect ons door naar dashboard
+      await register(email, password);
+      // Na succesvol registreren stuurt useEffect ons door naar dashboard
     } catch (err) {
-      setLoginError(err.message || 'Inloggen mislukt');
+      setRegisterError(err.message || 'Registratie mislukt');
       setIsLoading(false);
     }
   };
@@ -49,17 +61,17 @@ function LoginPage() {
         <div className="flex flex-col items-center">
           <img src={StriksLogo} alt="Striks Logo" className="h-28 mb-4" />
           <h2 className="text-center text-3xl font-bold text-striksMarine">
-            AutoMaatje
+            Maak een nieuw account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Powered by Striks Consulting
+            AutoMaatje - Powered by Striks Consulting
           </p>
         </div>
         
         {/* Foutmelding weergeven */}
-        {(loginError || error) && (
+        {(registerError || error) && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md relative" role="alert">
-            <span className="block sm:inline">{loginError || error}</span>
+            <span className="block sm:inline">{registerError || error}</span>
           </div>
         )}
         
@@ -81,7 +93,7 @@ function LoginPage() {
                 disabled={isLoading}
               />
             </div>
-            <div>
+            <div className="mb-4">
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                 Wachtwoord
               </label>
@@ -91,38 +103,45 @@ function LoginPage() {
                 type="password"
                 required
                 className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-striksRose focus:border-striksRose focus:z-10 sm:text-sm"
-                placeholder="Uw wachtwoord"
+                placeholder="Minimaal 6 tekens"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
               />
             </div>
+            <div>
+              <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
+                Bevestig wachtwoord
+              </label>
+              <input
+                id="confirm-password"
+                name="confirmPassword"
+                type="password"
+                required
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-striksRose focus:border-striksRose focus:z-10 sm:text-sm"
+                placeholder="Herhaal wachtwoord"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
           </div>
 
-          <div>
+          <div className="mt-6">
             <button
               type="submit"
               className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-striksMarine hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-striksRose ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
               disabled={isLoading}
             >
-              {isLoading ? 'Bezig met inloggen...' : 'Inloggen'}
+              {isLoading ? 'Bezig met registreren...' : 'Registreren'}
             </button>
-          </div>
-          
-          {/* Link voor test account */}
-          <div className="text-center text-sm mt-6 p-3 bg-striksLight rounded-md">
-            <p className="text-gray-600 font-medium">
-              Test accounts: <br />
-              Email: test@example.com <br />
-              Wachtwoord: test123
-            </p>
           </div>
           
           <div className="text-center text-sm mt-4">
             <p className="text-gray-600">
-              Nog geen account?{' '}
-              <Link to="/register" className="font-medium text-striksRose hover:text-striksRose hover:underline">
-                Registreer
+              Heb je al een account?{' '}
+              <Link to="/login" className="font-medium text-striksRose hover:text-striksRose hover:underline">
+                Log in
               </Link>
             </p>
           </div>
@@ -132,4 +151,4 @@ function LoginPage() {
   );
 }
 
-export default LoginPage; 
+export default RegisterPage; 
