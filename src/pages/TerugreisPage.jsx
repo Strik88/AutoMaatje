@@ -92,30 +92,32 @@ function TerugreisPage() {
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="container mx-auto px-4">
-        <h1 className="text-2xl font-bold mb-6">Terugreis Indeling</h1>
+        <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-striksMarine">Terugreis Indeling</h1>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex flex-col md:flex-row md:gap-6">
           {/* Beschikbare kinderen */}
-          <div className="bg-white p-4 rounded-lg shadow">
-            <h2 className="text-lg font-semibold mb-4">Beschikbare Kinderen</h2>
-            <div className="space-y-2">
-              {terugreisData.children.map(child => (
-                <DraggableChild 
-                  key={child.id} 
-                  child={child}
-                  id={`child-${child.id}`}
-                />
-              ))}
-              
-              {terugreisData.children.length === 0 && (
-                <p className="text-gray-400 text-sm">Alle kinderen zijn ingedeeld</p>
-              )}
+          <div className="w-full md:w-1/3 mb-4 md:mb-0">
+            <div className="bg-white p-4 rounded-lg shadow-md h-full border-t-4 border-striksRose">
+              <h2 className="text-lg font-semibold mb-4 text-striksMarine">In te delen kinderen</h2>
+              <div className="space-y-1">
+                {terugreisData.children.map(child => (
+                  <DraggableChild 
+                    key={child.id} 
+                    child={child}
+                    id={`child-${child.id}`}
+                  />
+                ))}
+                
+                {terugreisData.children.length === 0 && (
+                  <p className="text-gray-400 text-sm py-2 text-center">Alle kinderen zijn ingedeeld</p>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Auto's */}
-          <div className="md:col-span-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="w-full md:w-2/3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {terugreisData.cars.map(car => (
                 <DroppableCar 
                   key={car.id} 
@@ -129,7 +131,8 @@ function TerugreisPage() {
                     >
                       <button 
                         onClick={() => removeChildFromCarTerugreis(child.id, car.id)}
-                        className="text-red-500 hover:text-red-700 ml-2"
+                        className="text-red-500 hover:text-red-700 text-lg px-1"
+                        aria-label="Verwijder kind uit auto"
                       >
                         &times;
                       </button>
@@ -137,6 +140,13 @@ function TerugreisPage() {
                   ))}
                 </DroppableCar>
               ))}
+            </div>
+            
+            {/* Instructie voor gebruikers */}
+            <div className="mt-4 bg-striksMarine bg-opacity-5 p-3 rounded-md border border-striksMarine border-opacity-20 text-sm">
+              <p className="text-striksMarine">
+                <strong>Tip:</strong> Sleep een kind naar een auto om deze toe te wijzen. Klik op het kruisje om een kind te verwijderen.
+              </p>
             </div>
           </div>
         </div>

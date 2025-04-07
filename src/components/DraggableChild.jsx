@@ -20,11 +20,15 @@ function DraggableChild({ child, id, children }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-2 bg-gray-100 rounded border border-gray-200 cursor-move ${isDragging ? 'ring-2 ring-indigo-400' : ''} flex justify-between items-center`}
+      className={`p-2.5 my-1.5 bg-gray-100 rounded-lg border border-gray-200 cursor-move 
+        ${isDragging ? 'ring-2 ring-striksRose shadow-md' : ''} 
+        flex justify-between items-center
+        touch-manipulation select-none active:scale-[0.98] transition-all
+        hover:bg-striksLight hover:border-striksTurquoise`}
       {...listeners}
       {...attributes}
     >
-      <span>{child.name}</span>
+      <span className="text-striksMarine font-medium">{child.name}</span>
       {children}
     </div>
   );
