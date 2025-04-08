@@ -1,37 +1,66 @@
 import React from 'react';
 import { useDraggable } from '@dnd-kit/core';
+import { FiEdit2, FiTrash2 } from 'react-icons/fi';
+import { IconButton } from '@mui/material';
 
-function DraggableChild({ child, id, children }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: id || `child-${child.id}`,
+const DraggableChild = ({ 
+  child, 
+  isActive = false,
+  onEdit,
+  onDelete
+}) => {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: child.id,
     data: {
-      type: 'child',
       child
     }
   });
-
+  
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 1000 : 1
-  } : {};
+  } : undefined;
 
   return (
-    <div
-      ref={setNodeRef}
+    <div 
+      ref={setNodeRef} 
       style={style}
-      className={`p-2.5 my-1.5 bg-gray-100 rounded-lg border border-gray-200 cursor-move 
-        ${isDragging ? 'ring-2 ring-striksRose shadow-md' : ''} 
-        flex justify-between items-center
-        touch-manipulation select-none active:scale-[0.98] transition-all
-        hover:bg-striksLight hover:border-striksTurquoise`}
-      {...listeners}
+      {...listeners} 
       {...attributes}
+      className={`
+        flex justify-between items-center 
+        p-2 rounded bg-white shadow-sm border 
+        cursor-grab active:cursor-grabbing 
+        ${isActive ? 'ring-2 ring-blue-500 shadow-md' : ''}
+      `}
+      data-testid={`draggable-child-${child.id}`}
     >
-      <span className="text-striksMarine font-medium">{child.name}</span>
-      {children}
+      <span className="truncate">{child.name}</span>
+      <div className="flex">
+        <IconButton 
+          size="small" 
+          color="primary"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit && onEdit();
+          }}
+          className="p-1"
+        >
+          <FiEdit2 size={14} />
+        </IconButton>
+        <IconButton 
+          size="small" 
+          color="error"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete && onDelete();
+          }}
+          className="p-1"
+        >
+          <FiTrash2 size={14} />
+        </IconButton>
+      </div>
     </div>
   );
-}
+};
 
 export default DraggableChild; 

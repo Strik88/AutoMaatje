@@ -1,9 +1,44 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRideContext } from '../context/RideContext';
+import { useAuthContext } from '../context/AuthContext';
+import { 
+  Button, 
+  Card, 
+  CardContent, 
+  CardActions, 
+  TextField, 
+  Dialog, 
+  DialogTitle, 
+  DialogContent, 
+  DialogActions,
+  Typography,
+  Tooltip,
+  IconButton,
+  Badge,
+  CircularProgress,
+  Box,
+  Stack,
+  Container,
+  Paper,
+  Grid
+} from '@mui/material';
+import { 
+  FiEdit2, 
+  FiTrash2, 
+  FiPlus, 
+  FiArrowRight,
+  FiUsers,
+  FiCalendar,
+  FiMapPin
+} from 'react-icons/fi';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 function TripsPage() {
+  const navigate = useNavigate();
+  const { user } = useAuthContext();
   const { 
     trips, 
     currentTrip, 
@@ -12,7 +47,10 @@ function TripsPage() {
     error, 
     setupInitialData,
     updateTripInfo,
-    removeTrip
+    removeTrip,
+    loadTrips,
+    createTrip,
+    deleteTrip
   } = useRideContext();
   
   const [newTripTitle, setNewTripTitle] = useState('');
@@ -27,6 +65,16 @@ function TripsPage() {
   const [editTripDestination, setEditTripDestination] = useState('');
   const [editTripDate, setEditTripDate] = useState('');
   const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
+  const [showDialog, setShowDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletingTripId, setDeletingTripId] = useState(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    destination: '',
+    date: new Date().toISOString().split('T')[0]
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
   
   // Functie om een nieuwe trip aan te maken
   const handleCreateTrip = async (e) => {
@@ -131,247 +179,331 @@ function TripsPage() {
   
   // Formateer datum voor weergave
   const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    return new Date(dateString).toLocaleDateString('nl-NL', options);
+  };
+  
+  // Functie om te controleren of een gebruiker actief is op een trip
+  const getActiveUsers = (trip) => {
+    if (!trip.activeUsers || trip.activeUsers.length === 0) return [];
+    
+    return trip.activeUsers.filter(u => {
+      if (!u.lastActive) return false;
+      
+      const lastActiveTime = new Date(u.lastActive).getTime();
+      const currentTime = new Date().getTime();
+      const fiveMinutesInMs = 5 * 60 * 1000;
+      
+      return (currentTime - lastActiveTime) < fiveMinutesInMs;
+    });
+  };
+  
+  const handleOpenDialog = (trip = null) => {
+    if (trip) {
+      // Edit mode
+      setIsEditing(true);
+      setEditingTripId(trip.id);
+      setFormData({
+        name: trip.title || '',
+        destination: trip.destination || '',
+        date: trip.date ? new Date(trip.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+      });
+    } else {
+      // Create mode
+      setIsEditing(false);
+      setEditingTripId(null);
+      setFormData({
+        name: '',
+        destination: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+    }
+    setShowDialog(true);
+    setFormError(null);
+  };
+  
+  const handleCloseDialog = () => {
+    setShowDialog(false);
+    setIsEditing(false);
+    setEditingTripId(null);
+  };
+  
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+    setIsSubmitting(true);
+    
     try {
-      const date = new Date(dateString);
-      return format(date, 'd MMMM yyyy', { locale: nl });
+      if (!formData.name.trim()) {
+        throw new Error('Een naam voor de trip is verplicht');
+      }
+      
+      if (isEditing && editingTripId) {
+        // Update existing trip
+        await updateTripInfo(editingTripId, formData);
+        await loadTrips(); // Refresh trip list
+      } else {
+        // Create new trip
+        const newTripData = {
+          ...formData,
+          heenreis: {
+            cars: [],
+            children: []
+          },
+          terugreis: {
+            cars: [],
+            children: []
+          }
+        };
+        
+        try {
+          // Probeer een nieuwe trip aan te maken
+          const tripId = await createTrip(newTripData);
+          
+          // Laad de nieuw aangemaakte trip en navigeer naar Heenreis pagina
+          await loadTrip(tripId);
+          navigate('/heenreis');
+        } catch (error) {
+          console.error("Fout bij aanmaken trip:", error);
+          
+          // Toon foutmelding aan gebruiker
+          setFormError("Er is een probleem opgetreden bij het aanmaken van de trip. Probeer het later opnieuw.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      
+      // Sluit dialoog na succesvol opslaan
+      handleCloseDialog();
     } catch (error) {
-      return dateString;
+      console.error('Error saving trip:', error);
+      setFormError(error.message || 'Er is een fout opgetreden bij het opslaan van de trip');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  const handleOpenDeleteDialog = (tripId) => {
+    setDeletingTripId(tripId);
+    setShowDeleteDialog(true);
+  };
+  
+  const handleCloseDeleteDialog = () => {
+    setShowDeleteDialog(false);
+    setDeletingTripId(null);
+  };
+  
+  const handleDeleteTrip = async () => {
+    try {
+      setIsSubmitting(true);
+      await deleteTrip(deletingTripId);
+      await loadTrips(); // Refresh trip list
+      handleCloseDeleteDialog();
+    } catch (error) {
+      console.error('Error deleting trip:', error);
+      setFormError('Er is een fout opgetreden bij het verwijderen van de trip');
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
   if (loading) {
-    return <div className="text-center py-8">Laden...</div>;
+    return (
+      <Container>
+        <Box display="flex" justifyContent="center" alignItems="center" height="80vh">
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6 text-striksMarine">Ritten</h1>
-      
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-      
-      {/* Lijst van ritten */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-3 text-striksMarine">Jouw ritten</h2>
-        
-        {trips.length === 0 ? (
-          <p className="text-gray-500">Nog geen ritten. Maak een nieuwe rit aan.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {trips.map(trip => (
-              <div 
-                key={trip.id}
-                className={`border rounded-lg p-4 transition-all ${
-                  currentTrip?.id === trip.id 
-                    ? 'border-striksRose bg-striksLight' 
-                    : 'border-gray-200 hover:border-striksTurquoise'
-                }`}
-              >
-                <div onClick={() => handleSelectTrip(trip.id)} className="cursor-pointer">
-                  <h3 className="font-bold text-lg text-striksMarine">{trip.title}</h3>
-                  <p className="text-gray-600">{trip.destination}</p>
-                  <p className="text-sm text-gray-500">{formatDate(trip.date)}</p>
-                  
-                  {currentTrip?.id === trip.id && (
-                    <div className="mt-2 inline-block bg-striksRose bg-opacity-20 text-striksRose text-xs px-2 py-1 rounded">
-                      Actief
-                    </div>
-                  )}
-                </div>
-
-                {/* Bewerk- en verwijderknoppen */}
-                <div className="mt-4 flex space-x-2">
-                  <button 
-                    onClick={() => handleStartEdit(trip)}
-                    className="text-sm px-3 py-1 border border-striksMarine text-striksMarine rounded hover:bg-striksMarine hover:bg-opacity-10 transition-colors"
-                    aria-label={`Bewerk rit ${trip.title}`}
-                  >
-                    <span className="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      Bewerken
-                    </span>
-                  </button>
-                  <button 
-                    onClick={() => handleStartDelete(trip.id)}
-                    className="text-sm px-3 py-1 border border-gray-300 text-gray-600 rounded hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors"
-                    aria-label={`Verwijder rit ${trip.title}`}
-                  >
-                    <span className="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      Verwijderen
-                    </span>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      
-      {/* Verwijder bevestiging als modal */}
-      {deleteConfirmationId && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
-            <h3 className="text-lg font-medium text-gray-900 mb-3">Bevestig verwijderen</h3>
-            <p className="text-sm text-gray-700 mb-4">
-              Weet je zeker dat je deze rit wilt verwijderen?
-            </p>
-            <div className="flex space-x-3 justify-end">
-              <button 
-                onClick={handleCancelDelete}
-                className="text-sm px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-100 transition-colors"
-              >
-                Annuleren
-              </button>
-              <button 
-                onClick={() => handleConfirmDelete(deleteConfirmationId)}
-                className="text-sm px-4 py-2 border border-red-500 text-red-600 rounded hover:bg-red-500 hover:text-white transition-colors"
-              >
-                Ja, verwijderen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Formulier voor bewerken van een rit */}
-      {isEditing && (
-        <div className="bg-white p-4 rounded-lg shadow-md border border-striksTurquoise mb-6">
-          <h2 className="text-xl font-semibold mb-3 text-striksMarine">Rit bewerken</h2>
-          <form onSubmit={handleUpdateTrip} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Titel</label>
-              <input
-                type="text"
-                value={editTripTitle}
-                onChange={e => setEditTripTitle(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-striksRose focus:border-striksRose"
-                placeholder="Rit naam"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Bestemming</label>
-              <input
-                type="text"
-                value={editTripDestination}
-                onChange={e => setEditTripDestination(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-striksRose focus:border-striksRose"
-                placeholder="Bestemming"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Datum</label>
-              <input
-                type="date"
-                value={editTripDate}
-                onChange={e => setEditTripDate(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-striksRose focus:border-striksRose"
-                required
-              />
-            </div>
-            
-            <div className="flex space-x-2">
-              <button
-                type="submit"
-                className="bg-striksMarine text-white px-4 py-2 rounded hover:bg-opacity-90"
-              >
-                Opslaan
-              </button>
-              <button
-                type="button"
-                onClick={handleCancelEdit}
-                className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400"
-              >
-                Annuleren
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-      
-      {/* Formulier voor nieuwe rit */}
-      <div className="bg-striksLight p-4 rounded-lg border border-gray-200">
-        <h2 className="text-xl font-semibold mb-3 text-striksMarine">
-          {isCreating ? 'Nieuwe rit aanmaken' : ''}
-        </h2>
-        
-        {!isCreating ? (
-          <button 
-            onClick={() => {
-              setIsCreating(true);
-              setIsEditing(false);
-            }}
-            className="bg-striksMarine text-white px-4 py-2 rounded hover:bg-opacity-90"
+    <Container>
+      <Box my={4}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h4" component="h1">
+            Ritten
+          </Typography>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            startIcon={<AddIcon />}
+            onClick={handleOpenDialog}
           >
-            Nieuwe rit
-          </button>
-        ) : (
-          <form onSubmit={handleCreateTrip} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Titel</label>
-              <input
-                type="text"
-                value={newTripTitle}
-                onChange={e => setNewTripTitle(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-striksRose focus:border-striksRose"
-                placeholder="Rit naam"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Bestemming</label>
-              <input
-                type="text"
-                value={newTripDestination}
-                onChange={e => setNewTripDestination(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-striksRose focus:border-striksRose"
-                placeholder="Bestemming"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Datum</label>
-              <input
-                type="date"
-                value={newTripDate}
-                onChange={e => setNewTripDate(e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-striksRose focus:border-striksRose"
-                required
-              />
-            </div>
-            
-            <div className="flex space-x-2">
-              <button
-                type="submit"
-                className="bg-striksMarine text-white px-4 py-2 rounded hover:bg-opacity-90"
-              >
-                Aanmaken
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCreating(false)}
-                className="bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400"
-              >
-                Annuleren
-              </button>
-            </div>
-          </form>
+            Nieuwe Rit
+          </Button>
+        </Box>
+
+        {error && (
+          <Paper sx={{ p: 2, mb: 2, bgcolor: 'error.light' }}>
+            <Typography color="error">{error}</Typography>
+          </Paper>
         )}
-      </div>
-    </div>
+
+        {trips.length === 0 ? (
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body1">
+              Geen ritten gevonden. Maak een nieuwe rit aan om te beginnen.
+            </Typography>
+          </Paper>
+        ) : (
+          <Grid container spacing={3}>
+            {trips.map((trip) => {
+              const activeUsers = getActiveUsers(trip);
+              const isCurrentUserActive = user && activeUsers.some(u => u.uid === user.uid);
+              
+              return (
+                <Grid item xs={12} sm={6} md={4} key={trip.id}>
+                  <Card>
+                    <CardContent>
+                      <Box display="flex" justifyContent="space-between">
+                        <Typography variant="h6" component="h2">
+                          {trip.title}
+                        </Typography>
+                        <Box>
+                          <IconButton 
+                            size="small" 
+                            color="primary"
+                            onClick={() => handleOpenDialog(trip)}
+                          >
+                            <FiEdit2 />
+                          </IconButton>
+                          <IconButton 
+                            size="small" 
+                            color="error"
+                            onClick={() => handleOpenDeleteDialog(trip.id)}
+                          >
+                            <FiTrash2 />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                      <Typography color="textSecondary" gutterBottom>
+                        {formatDate(trip.date)}
+                      </Typography>
+                      <Typography variant="body2">
+                        Bestemming: {trip.destination}
+                      </Typography>
+                      <Divider sx={{ my: 1 }} />
+                      <Button 
+                        variant="outlined" 
+                        color="primary" 
+                        fullWidth
+                        onClick={() => handleSelectTrip(trip.id)}
+                      >
+                        Selecteer
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              );
+            })}
+          </Grid>
+        )}
+      </Box>
+
+      {/* Dialoog voor het aanmaken/bewerken van een trip */}
+      <Dialog open={showDialog} onClose={handleCloseDialog}>
+        <DialogTitle>
+          {isEditing ? 'Rit wijzigen' : 'Nieuwe rit maken'}
+        </DialogTitle>
+        <form onSubmit={handleSubmit}>
+          <DialogContent>
+            {formError && (
+              <Box mb={2} p={1} bgcolor="error.light">
+                <Typography color="error">{formError}</Typography>
+              </Box>
+            )}
+            <TextField
+              autoFocus
+              margin="dense"
+              name="name"
+              label="Naam van de rit"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={formData.name}
+              onChange={handleInputChange}
+              required
+            />
+            <TextField
+              margin="dense"
+              name="destination"
+              label="Bestemming"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={formData.destination}
+              onChange={handleInputChange}
+              required
+            />
+            <TextField
+              margin="dense"
+              name="date"
+              label="Datum"
+              type="date"
+              fullWidth
+              variant="outlined"
+              value={formData.date}
+              onChange={handleInputChange}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              required
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog} color="primary">
+              Annuleren
+            </Button>
+            <Button 
+              type="submit" 
+              color="primary" 
+              variant="contained"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <CircularProgress size={24} /> : 'Opslaan'}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+
+      {/* Bevestigingsdialoog voor verwijderen */}
+      <Dialog
+        open={showDeleteDialog}
+        onClose={handleCloseDeleteDialog}
+      >
+        <DialogTitle>
+          Rit verwijderen
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Weet je zeker dat je deze rit wilt verwijderen? Dit kan niet ongedaan worden gemaakt.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog} color="primary">
+            Annuleren
+          </Button>
+          <Button 
+            onClick={handleDeleteTrip} 
+            color="error" 
+            variant="contained"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? <CircularProgress size={24} /> : 'Verwijderen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
   );
 }
 

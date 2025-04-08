@@ -59,4 +59,35 @@
 .border-l-gradient-human {
   border-left: 3px solid;
   border-image: linear-gradient(to bottom, #8A4E85, #F27052) 1;
+}
+
+/* Striks Gradient definities */
+.bg-gradient-primary {
+  background: linear-gradient(120deg, #1A2B50, #3BC5C9);
+}
+
+.bg-gradient-secondary {
+  background: linear-gradient(120deg, #C64B8C, #F27052);
+}
+
+.bg-gradient-tertiary {
+  background: linear-gradient(120deg, #8A4E85, #4B99D2);
+}
+
+.bg-gradient-light {
+  background: linear-gradient(120deg, #F7F9FC, #FFFFFF);
+}
+
+.text-gradient-primary {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(120deg, #1A2B50, #3BC5C9);
+}
+
+.text-gradient-secondary {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(120deg, #C64B8C, #F27052);
 } 

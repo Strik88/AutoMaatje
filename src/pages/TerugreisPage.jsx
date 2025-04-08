@@ -3,6 +3,8 @@ import { DndContext, useSensor, useSensors, PointerSensor, TouchSensor } from '@
 import DraggableChild from '../components/DraggableChild';
 import DroppableCar from '../components/DroppableCar';
 import { useRideContext } from '../context/RideContext';
+import { FiX } from 'react-icons/fi';
+import { FaCarSide } from 'react-icons/fa';
 
 function TerugreisPage() {
   // Gebruik de ride context
@@ -134,7 +136,7 @@ function TerugreisPage() {
                         className="text-red-500 hover:text-red-700 text-lg px-1"
                         aria-label="Verwijder kind uit auto"
                       >
-                        &times;
+                        <FiX size={20} />
                       </button>
                     </DraggableChild>
                   ))}

@@ -1,4 +1,20 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+import { db } from '../firebase/config';
+import { 
+  addDoc, 
+  collection, 
+  doc, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  getDoc,
+  setDoc
+} from 'firebase/firestore';
+import { auth } from '../firebase/config';
+import useLocalStorage from '../hooks/useLocalStorage';
 import { useAuthContext } from './AuthContext';
 import { 
   getTrips,
@@ -9,14 +25,23 @@ import {
   getCars,
   getChildren,
   updateTrip,
-  deleteTrip
+  deleteTrip,
+  subscribeToTrips,
+  subscribeToTripById
 } from '../firebase/rideService';
+import { onAuthStateChanged } from 'firebase/auth';
+
+// Mock functions for local development
+// Deze functie moet een unieke ID teruggeven voor nieuwe items
+const generateId = () => uuidv4();
 
 // Create context
 const RideContext = createContext();
 
 // Hook to use the context
 export const useRideContext = () => useContext(RideContext);
+// Alias for compatibility
+export const useRide = useRideContext;
 
 // Provider component
 export const RideProvider = ({ children }) => {
@@ -25,6 +50,7 @@ export const RideProvider = ({ children }) => {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeUsers, setActiveUsers] = useState([]);
   
   // State voor heen- en terugreis data
   const [heenreisData, setHeenreisData] = useState({
@@ -37,6 +63,10 @@ export const RideProvider = ({ children }) => {
     children: []
   });
   
+  const [mockMode, setMockMode] = useState(false);
+  const [originalMockData, setOriginalMockData] = useLocalStorage('automaatje-mock-data', null);
+  const [localChildren, setLocalChildren] = useLocalStorage('automaatje-all-children', []);
+  
   // Laad trips wanneer de gebruiker is ingelogd
   useEffect(() => {
     if (user) {
@@ -44,471 +74,380 @@ export const RideProvider = ({ children }) => {
     }
   }, [user]);
   
-  // Laad trips van Firebase
-  const loadTrips = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const tripsData = await getTrips();
-      setTrips(tripsData);
-      
-      // Als er trips zijn, laad de eerste als huidige trip
-      if (tripsData.length > 0) {
-        await loadTrip(tripsData[0].id);
-      } else {
-        // Geen trips gevonden, maak testdata
-        await setupInitialData();
-      }
-      
-      setLoading(false);
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-    }
-  };
-  
-  // Laad specifieke trip
-  const loadTrip = async (tripId) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const tripData = await getTripById(tripId);
-      setCurrentTrip(tripData);
-      
-      if (tripData) {
-        // Laad heen- en terugreis data
-        if (tripData.heenreis) {
-          setHeenreisData(tripData.heenreis);
-        }
-        
-        if (tripData.terugreis) {
-          setTerugreisData(tripData.terugreis);
-        }
-      }
-      
-      setLoading(false);
-      return tripData;
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-      return null;
-    }
-  };
-  
-  // Functie om een trip bij te werken
-  const updateTripInfo = async (tripId, updateData) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const updatedTrip = await updateTrip(tripId, updateData);
-      
-      // Update de lokale trips state
-      setTrips(prevTrips => 
-        prevTrips.map(trip => 
-          trip.id === tripId ? updatedTrip : trip
-        )
-      );
-      
-      // Als de huidige trip is bijgewerkt, update currentTrip
-      if (currentTrip && currentTrip.id === tripId) {
-        setCurrentTrip(updatedTrip);
-      }
-      
-      setLoading(false);
-      return updatedTrip;
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
-      return null;
-    }
-  };
-  
-  // Functie om een trip te verwijderen
-  const removeTrip = async (tripId) => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await deleteTrip(tripId);
-      
-      // Verwijder uit lokale state
-      const updatedTrips = trips.filter(trip => trip.id !== tripId);
+  // Abonneer op realtime trip updates
+  useEffect(() => {
+    if (!user) return;
+    
+    // Abonneer op alle trips
+    const unsubscribeTrips = subscribeToTrips((updatedTrips) => {
       setTrips(updatedTrips);
       
-      // Als de huidige trip is verwijderd, laad een andere trip
-      if (currentTrip && currentTrip.id === tripId) {
-        if (updatedTrips.length > 0) {
-          await loadTrip(updatedTrips[0].id);
-        } else {
-          setCurrentTrip(null);
-          setHeenreisData({ cars: [], children: [] });
-          setTerugreisData({ cars: [], children: [] });
+      // Als de huidige trip tussen de updates zit, update de lokale versie
+      if (currentTrip) {
+        const updatedCurrentTrip = updatedTrips.find(t => t.id === currentTrip.id);
+        if (updatedCurrentTrip && JSON.stringify(updatedCurrentTrip) !== JSON.stringify(currentTrip)) {
+          setCurrentTrip(updatedCurrentTrip);
+          
+          // Update ook de heen- en terugreis data indien nodig
+          if (updatedCurrentTrip.heenreis) {
+            setHeenreisData(updatedCurrentTrip.heenreis);
+          }
+          
+          if (updatedCurrentTrip.terugreis) {
+            setTerugreisData(updatedCurrentTrip.terugreis);
+          }
         }
+      }
+    });
+    
+    // Cleanup
+    return () => {
+      unsubscribeTrips();
+    };
+  }, [user, currentTrip]);
+  
+  // Abonneer op specifieke trip details als er een huidige trip is
+  useEffect(() => {
+    if (!user || !currentTrip) return;
+    
+    const unsubscribeTripDetails = subscribeToTripById(currentTrip.id, (updatedTrip) => {
+      if (!updatedTrip) return;
+      
+      setCurrentTrip(updatedTrip);
+      
+      // Update ook de heen- en terugreis data indien nodig
+      if (updatedTrip.heenreis) {
+        setHeenreisData(updatedTrip.heenreis);
+      }
+      
+      if (updatedTrip.terugreis) {
+        setTerugreisData(updatedTrip.terugreis);
+      }
+      
+      // Update lijst van actieve gebruikers voor deze trip
+      if (updatedTrip.activeUsers) {
+        setActiveUsers(updatedTrip.activeUsers);
+      }
+    });
+    
+    // Cleanup
+    return () => {
+      unsubscribeTripDetails();
+    };
+  }, [user, currentTrip?.id]);
+  
+  // Initialiseer het systeem
+  useEffect(() => {
+    const initializeSystem = async () => {
+      setLoading(true);
+      try {
+        // Check of Firebase beschikbaar is via auth
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          // Als we geen auth user hebben, gebruik mock data
+          if (!user) {
+            console.log("Geen ingelogde gebruiker gevonden, mockMode ingeschakeld");
+            setMockMode(true);
+          } else {
+            console.log("Ingelogde gebruiker gevonden, gebruik Firebase");
+            setMockMode(false);
+          }
+          
+          // Laad alle trips
+          await loadTrips();
+          setLoading(false);
+          
+          // Cleanup auth listener
+          return () => unsubscribe();
+        });
+      } catch (err) {
+        console.error("Fout bij initialisatie:", err);
+        setError("Er is een probleem opgetreden bij het laden van de app.");
+        setMockMode(true); // Fallback naar mock mode
+        setLoading(false);
+      }
+    };
+
+    initializeSystem();
+  }, []);
+  
+  // Laad trips van Firebase
+  const loadTrips = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      if (!mockMode && auth.currentUser) {
+        // Laad ritten vanuit Firebase
+        const userTripsRef = collection(db, 'trips');
+        const q = query(userTripsRef, where('userId', '==', auth.currentUser.uid));
+        const querySnapshot = await getDocs(q);
+        
+        const tripsData = [];
+        querySnapshot.forEach((doc) => {
+          tripsData.push({ id: doc.id, ...doc.data() });
+        });
+        
+        setTrips(tripsData);
+      } else {
+        // Laad mock trips
+        if (originalMockData && originalMockData.trips) {
+          setTrips(originalMockData.trips || []);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading trips:", err);
+      setError(err.message);
+      // Als we een error krijgen, val terug op mock data
+      if (originalMockData && originalMockData.trips) {
+        setTrips(originalMockData.trips || []);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [mockMode, originalMockData]);
+  
+  // Laad specifieke trip
+  const loadTrip = useCallback(async (tripId) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      let tripData;
+      
+      if (!mockMode && auth.currentUser) {
+        // Laad trip vanuit Firebase
+        const tripRef = doc(db, 'trips', tripId);
+        const tripDoc = await getDoc(tripRef);
+        
+        if (!tripDoc.exists()) {
+          throw new Error('Trip niet gevonden');
+        }
+        
+        tripData = { id: tripDoc.id, ...tripDoc.data() };
+      } else {
+        // Laad trip vanuit mock data
+        const mockTrip = originalMockData.trips.find(t => t.id === tripId);
+        
+        if (!mockTrip) {
+          throw new Error('Trip niet gevonden in mock data');
+        }
+        
+        tripData = { ...mockTrip };
+      }
+      
+      setCurrentTrip(tripData);
+      
+      // Initialiseer heenreis en terugreis data
+      if (tripData.heenreis) {
+        setHeenreisData(tripData.heenreis);
+      } else {
+        setHeenreisData({ cars: [], children: [] });
+      }
+      
+      if (tripData.terugreis) {
+        setTerugreisData(tripData.terugreis);
+      } else {
+        setTerugreisData({ cars: [], children: [] });
       }
       
       setLoading(false);
-      return true;
+      
+      return tripData;
     } catch (err) {
+      console.error("Error loading trip:", err);
       setError(err.message);
       setLoading(false);
-      return false;
-    }
-  };
-  
-  // Maak testdata voor de app
-  const setupInitialData = async (tripData = {}) => {
-    try {
-      // Testdata voorbereiden
-      const initialCars = [
-        { id: 1, driver: "Ouder 1", capacity: 3, assigned: [] },
-        { id: 2, driver: "Ouder 2", capacity: 4, assigned: [] }
-      ];
-      
-      const initialChildren = [
-        { id: 1, name: "Kind 1" },
-        { id: 2, name: "Kind 2" },
-        { id: 3, name: "Kind 3" }
-      ];
-      
-      // Nieuwe trip aanmaken
-      const initialTripData = {
-        title: tripData.title || "Testrit",
-        date: tripData.date || new Date().toISOString(),
-        destination: tripData.destination || "Testbestemming",
-        heenreis: {
-          cars: initialCars,
-          children: initialChildren
-        },
-        terugreis: {
-          cars: initialCars,
-          children: initialChildren
-        },
-        createdBy: user?.uid
-      };
-      
-      const tripId = await createTrip(initialTripData);
-      
-      // Nieuwe trip laden
-      await loadTrip(tripId);
-      await loadTrips(); // Trips opnieuw laden
-      
-      return tripId;
-    } catch (err) {
-      setError(err.message);
       return null;
     }
-  };
+  }, [mockMode, originalMockData]);
   
-  // Functie om de heenreis data bij te werken
-  const updateHeenreisData = async (newData) => {
-    if (!currentTrip) return false;
+  // Maak een nieuwe rit aan
+  const createTrip = async (tripData) => {
+    setLoading(true);
+    setError(null);
     
     try {
-      setHeenreisData(prev => ({
-        ...prev,
-        ...newData
-      }));
-      
-      // Update Firebase
-      if (currentTrip) {
-        await updateTripHeenreis(currentTrip.id, {
-          ...heenreisData,
-          ...newData
-        });
+      const newTripId = await rideService.createTrip(tripData);
+      if (newTripId) {
+        // Herlaad trips om de nieuwe trip te tonen
+        await loadTrips();
+        return newTripId;
+      } else {
+        throw new Error("Geen trip ID ontvangen bij aanmaken");
       }
-      
-      return true;
     } catch (err) {
-      setError(err.message);
-      return false;
+      console.error("Fout bij het aanmaken van trip:", err);
+      setError("Er is een probleem opgetreden bij het aanmaken van de rit.");
+      return null;
+    } finally {
+      setLoading(false);
     }
   };
   
-  // Functie om de terugreis data bij te werken
-  const updateTerugreisData = async (newData) => {
-    if (!currentTrip) return false;
+  // Update een bestaande rit
+  const updateTripInfo = async (tripId, updatedData) => {
+    setLoading(true);
+    setError(null);
     
     try {
-      setTerugreisData(prev => ({
-        ...prev,
-        ...newData
-      }));
-      
-      // Update Firebase
-      if (currentTrip) {
-        await updateTripTerugreis(currentTrip.id, {
-          ...terugreisData,
-          ...newData
-        });
-      }
-      
-      return true;
-    } catch (err) {
-      setError(err.message);
-      return false;
-    }
-  };
-  
-  // Functie om kind toe te wijzen aan heenreis auto
-  const assignChildToCarHeenreis = async (childId, carId) => {
-    const childToAssign = heenreisData.children.find(c => c.id === childId);
-    if (!childToAssign) return false;
-    
-    const updatedCars = heenreisData.cars.map(car => {
-      if (car.id === carId) {
-        // Controleer of auto vol is
-        if (car.assigned.length >= car.capacity) return car;
-        
-        return {
-          ...car,
-          assigned: [...car.assigned, childToAssign]
-        };
-      }
-      return car;
-    });
-    
-    const updatedChildren = heenreisData.children.filter(c => c.id !== childId);
-    
-    const updatedData = {
-      cars: updatedCars,
-      children: updatedChildren
-    };
-    
-    // Update state en Firebase
-    const success = await updateHeenreisData(updatedData);
-    
-    if (success) {
-      // Poging om hetzelfde kind in dezelfde auto voor terugreis toe te wijzen
-      tryAssignChildToSameCarTerugreis(childToAssign, carId);
-    }
-    
-    return success;
-  };
-  
-  // Functie om kind toe te wijzen aan terugreis auto
-  const assignChildToCarTerugreis = async (childId, carId) => {
-    const childToAssign = terugreisData.children.find(c => c.id === childId);
-    if (!childToAssign) return false;
-    
-    const updatedCars = terugreisData.cars.map(car => {
-      if (car.id === carId) {
-        // Controleer of auto vol is
-        if (car.assigned.length >= car.capacity) return car;
-        
-        return {
-          ...car,
-          assigned: [...car.assigned, childToAssign]
-        };
-      }
-      return car;
-    });
-    
-    const updatedChildren = terugreisData.children.filter(c => c.id !== childId);
-    
-    const updatedData = {
-      cars: updatedCars,
-      children: updatedChildren
-    };
-    
-    // Update state en Firebase
-    return await updateTerugreisData(updatedData);
-  };
-  
-  // Probeer kind in dezelfde auto toe te wijzen voor terugreis
-  const tryAssignChildToSameCarTerugreis = (child, heenreisCarId) => {
-    // Controleer of het kind al in de terugreis zit
-    const isChildInTerugreis = terugreisData.cars.some(car => 
-      car.assigned.some(c => c.id === child.id)
-    );
-    
-    if (isChildInTerugreis) return false;
-    
-    // Zoek het kind in de beschikbare kinderen voor terugreis
-    const childInTerugreis = terugreisData.children.find(c => c.id === child.id);
-    if (!childInTerugreis) return false;
-    
-    // Zoek dezelfde auto in terugreis
-    const terugreisCar = terugreisData.cars.find(car => car.id === heenreisCarId);
-    if (!terugreisCar) return false;
-    
-    // Controleer of auto nog ruimte heeft
-    if (terugreisCar.assigned.length >= terugreisCar.capacity) return false;
-    
-    // Wijs toe aan dezelfde auto
-    assignChildToCarTerugreis(child.id, heenreisCarId);
-    return true;
-  };
-  
-  // Functie om kind te verwijderen uit heenreis auto
-  const removeChildFromCarHeenreis = async (childId, carId) => {
-    const car = heenreisData.cars.find(c => c.id === carId);
-    if (!car) return false;
-    
-    const childToRemove = car.assigned.find(c => c.id === childId);
-    if (!childToRemove) return false;
-    
-    const updatedCars = heenreisData.cars.map(car => {
-      if (car.id === carId) {
-        return {
-          ...car,
-          assigned: car.assigned.filter(c => c.id !== childId)
-        };
-      }
-      return car;
-    });
-    
-    const updatedData = {
-      cars: updatedCars,
-      children: [...heenreisData.children, childToRemove]
-    };
-    
-    // Update state en Firebase
-    return await updateHeenreisData(updatedData);
-  };
-  
-  // Functie om kind te verwijderen uit terugreis auto
-  const removeChildFromCarTerugreis = async (childId, carId) => {
-    const car = terugreisData.cars.find(c => c.id === carId);
-    if (!car) return false;
-    
-    const childToRemove = car.assigned.find(c => c.id === childId);
-    if (!childToRemove) return false;
-    
-    const updatedCars = terugreisData.cars.map(car => {
-      if (car.id === carId) {
-        return {
-          ...car,
-          assigned: car.assigned.filter(c => c.id !== childId)
-        };
-      }
-      return car;
-    });
-    
-    const updatedData = {
-      cars: updatedCars,
-      children: [...terugreisData.children, childToRemove]
-    };
-    
-    // Update state en Firebase
-    return await updateTerugreisData(updatedData);
-  };
-  
-  // Functie om alle kinderen (uit alle ritten) op te halen en op te slaan in localStorage
-  const loadAllSavedChildren = () => {
-    try {
-      // Eerst alle huidige kinderen ophalen (toegewezen en niet-toegewezen)
-      const currentChildren = getAllChildrenFromCurrentTrip();
-      
-      // Opgeslagen kinderen ophalen
-      let savedChildren = [];
-      const savedChildrenString = localStorage.getItem('automaatje_all_children');
-      if (savedChildrenString) {
-        savedChildren = JSON.parse(savedChildrenString);
-      }
-      
-      // Combineer huidige kinderen met opgeslagen kinderen (voorkom duplicaten op ID)
-      const allChildren = [...savedChildren];
-      
-      currentChildren.forEach(child => {
-        // Controleer of kind met dit ID al bestaat
-        if (!allChildren.some(c => c.id === child.id)) {
-          allChildren.push(child);
+      const updatedTrip = await rideService.updateTrip(tripId, updatedData);
+      if (updatedTrip) {
+        // Als dit de huidige trip is, update state
+        if (currentTrip && currentTrip.id === tripId) {
+          setCurrentTrip(updatedTrip);
         }
-      });
+        // Herlaad alle trips
+        await loadTrips();
+        return updatedTrip;
+      } else {
+        throw new Error("Geen bijgewerkte trip ontvangen");
+      }
+    } catch (err) {
+      console.error("Fout bij het bijwerken van trip:", err);
+      setError("Er is een probleem opgetreden bij het bijwerken van de rit.");
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Verwijder een rit
+  const deleteTrip = async (tripId) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      await rideService.deleteTrip(tripId);
       
-      // Sla alle kinderen op in localStorage
-      localStorage.setItem('automaatje_all_children', JSON.stringify(allChildren));
+      // Als dit de huidige trip is, reset state
+      if (currentTrip && currentTrip.id === tripId) {
+        setCurrentTrip(null);
+      }
       
-      return allChildren;
-    } catch (error) {
-      console.error('Fout bij laden van alle kinderen:', error);
+      // Herlaad alle trips
+      await loadTrips();
+      return true;
+    } catch (err) {
+      console.error("Fout bij het verwijderen van trip:", err);
+      setError("Er is een probleem opgetreden bij het verwijderen van de rit.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Update heenreis en terugreis data
+  const updateHeenreisData = async (updatedData) => {
+    if (!currentTrip) {
+      setError("Er is geen rit geselecteerd.");
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const updatedTrip = await rideService.updateTripHeenreis(
+        currentTrip.id, 
+        updatedData
+      );
+      
+      if (updatedTrip) {
+        setCurrentTrip(updatedTrip);
+        return true;
+      } else {
+        throw new Error("Geen bijgewerkte trip ontvangen");
+      }
+    } catch (err) {
+      console.error("Fout bij het bijwerken van heenreis:", err);
+      setError("Er is een probleem opgetreden bij het bijwerken van de heenreis.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const updateTerugreisData = async (updatedData) => {
+    if (!currentTrip) {
+      setError("Er is geen rit geselecteerd.");
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const updatedTrip = await rideService.updateTripTerugreis(
+        currentTrip.id, 
+        updatedData
+      );
+      
+      if (updatedTrip) {
+        setCurrentTrip(updatedTrip);
+        return true;
+      } else {
+        throw new Error("Geen bijgewerkte trip ontvangen");
+      }
+    } catch (err) {
+      console.error("Fout bij het bijwerken van terugreis:", err);
+      setError("Er is een probleem opgetreden bij het bijwerken van de terugreis.");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Haal alle opgeslagen kinderen op
+  const loadAllSavedChildren = async () => {
+    try {
+      return await rideService.loadAllSavedChildren();
+    } catch (err) {
+      console.error("Fout bij het laden van opgeslagen kinderen:", err);
+      setError("Er is een probleem opgetreden bij het ophalen van opgeslagen kinderen.");
       return [];
     }
   };
   
-  // Functie om alle kinderen uit de huidige trip te verzamelen
+  // Haal alle kinderen op uit de huidige rit
   const getAllChildrenFromCurrentTrip = () => {
     if (!currentTrip) return [];
-    
-    const heenreisChildren = heenreisData.children || [];
-    const heenreisAssignedChildren = heenreisData.cars ? 
-      heenreisData.cars.flatMap(car => car.assigned || []) : [];
-    
-    const terugreisChildren = terugreisData.children || [];
-    const terugreisAssignedChildren = terugreisData.cars ? 
-      terugreisData.cars.flatMap(car => car.assigned || []) : [];
-    
-    // Combineer alle kinderen en verwijder duplicaten op basis van ID
-    const allChildrenWithDuplicates = [
-      ...heenreisChildren, 
-      ...heenreisAssignedChildren,
-      ...terugreisChildren,
-      ...terugreisAssignedChildren
-    ];
-    
-    // Map om duplicaten te verwijderen
-    const childMap = new Map();
-    allChildrenWithDuplicates.forEach(child => {
-      if (child && child.id) {
-        childMap.set(child.id, child);
-      }
-    });
-    
-    return Array.from(childMap.values());
+    return rideService.getAllChildrenFromCurrentTrip(currentTrip);
   };
   
-  // Functie om opgeslagen kinderen toe te voegen aan de huidige trip
-  const addSavedChildrenToCurrentTrip = async () => {
+  // Voeg opgeslagen kinderen toe aan de huidige trip
+  const addSavedChildrenToCurrentTrip = async (newChildren, direction = 'heenreis') => {
     if (!currentTrip) {
-      setError('Geen actieve rit geselecteerd');
+      setError("Er is geen rit geselecteerd.");
       return false;
     }
     
     try {
-      // Update het lokale bestand met de huidige trip data
-      loadAllSavedChildren();
+      // Huidige data ophalen
+      const currentData = direction === 'heenreis' 
+        ? {...currentTrip.heenreis} 
+        : {...currentTrip.terugreis};
       
-      // Haal alle opgeslagen kinderen op
-      const savedChildrenString = localStorage.getItem('automaatje_all_children');
-      if (!savedChildrenString) {
-        setError('Geen opgeslagen kinderen gevonden');
-        return false;
+      // Controleer of children array bestaat
+      if (!currentData.children) {
+        currentData.children = [];
       }
       
-      const savedChildren = JSON.parse(savedChildrenString);
-      if (savedChildren.length === 0) {
-        setError('Geen opgeslagen kinderen gevonden');
-        return false;
+      // Check voor duplicaten en voeg toe
+      const existingIds = new Set(currentData.children.map(child => child.id.toString()));
+      const childrenToAdd = newChildren.filter(child => !existingIds.has(child.id.toString()));
+      
+      // Voeg toe aan bestaande kinderen
+      currentData.children = [...currentData.children, ...childrenToAdd];
+      
+      // Update de juiste data
+      if (direction === 'heenreis') {
+        return await updateHeenreisData(currentData);
+      } else {
+        return await updateTerugreisData(currentData);
       }
-      
-      // Huidige kinderen IDs ophalen om duplicaten te voorkomen
-      const currentChildrenIds = getAllChildrenFromCurrentTrip().map(child => child.id);
-      
-      // Filter kinderen die nog niet in de huidige trip zitten
-      const newChildren = savedChildren.filter(child => !currentChildrenIds.includes(child.id));
-      
-      if (newChildren.length === 0) {
-        alert('Alle beschikbare kinderen zijn al toegevoegd aan deze trip');
-        return false;
-      }
-      
-      // Voeg nieuwe kinderen toe aan heenreis en terugreis
-      await updateHeenreisData({
-        children: [...heenreisData.children, ...newChildren]
-      });
-      
-      await updateTerugreisData({
-        children: [...terugreisData.children, ...newChildren]
-      });
-      
-      alert(`${newChildren.length} eerder gebruikte kinderen toegevoegd`);
-      return true;
-    } catch (error) {
-      console.error('Fout bij toevoegen van opgeslagen kinderen:', error);
-      setError(error.message);
+    } catch (err) {
+      console.error(`Fout bij het toevoegen van kinderen aan ${direction}:`, err);
+      setError(`Er is een probleem opgetreden bij het toevoegen van kinderen aan de ${direction}.`);
       return false;
     }
   };
@@ -521,19 +460,16 @@ export const RideProvider = ({ children }) => {
     error,
     heenreisData,
     terugreisData,
+    activeUsers,
     loadTrips,
     loadTrip,
+    createTrip,
     updateTripInfo,
-    removeTrip,
-    setupInitialData,
+    deleteTrip,
     updateHeenreisData,
     updateTerugreisData,
-    assignChildToCarHeenreis,
-    assignChildToCarTerugreis,
-    removeChildFromCarHeenreis,
-    removeChildFromCarTerugreis,
-    tryAssignChildToSameCarTerugreis,
     loadAllSavedChildren,
+    getAllChildrenFromCurrentTrip,
     addSavedChildrenToCurrentTrip
   };
   
