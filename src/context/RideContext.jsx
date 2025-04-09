@@ -11,10 +11,11 @@ import {
   query, 
   where, 
   getDoc,
-  setDoc
+  setDoc,
+  onSnapshot
 } from 'firebase/firestore';
 import { auth } from '../firebase/config';
-import useLocalStorage from '../hooks/useLocalStorage';
+import useLocalStorage from '../hooks/useLocalStorage.js';
 import { useAuthContext } from './AuthContext';
 import { 
   getTrips,
@@ -30,6 +31,7 @@ import {
   subscribeToTripById
 } from '../firebase/rideService';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useClassAuthContext } from './ClassAuthContext';
 
 // Mock functions for local development
 // Deze functie moet een unieke ID teruggeven voor nieuwe items
@@ -44,7 +46,7 @@ export const useRideContext = () => useContext(RideContext);
 export const useRide = useRideContext;
 
 // Provider component
-export const RideProvider = ({ children }) => {
+export function RideProvider({ children }) {
   const { user } = useAuthContext();
   const [currentTrip, setCurrentTrip] = useState(null);
   const [trips, setTrips] = useState([]);
@@ -66,6 +68,8 @@ export const RideProvider = ({ children }) => {
   const [mockMode, setMockMode] = useState(false);
   const [originalMockData, setOriginalMockData] = useLocalStorage('automaatje-mock-data', null);
   const [localChildren, setLocalChildren] = useLocalStorage('automaatje-all-children', []);
+  
+  const { currentClass } = useClassAuthContext();
   
   // Laad trips wanneer de gebruiker is ingelogd
   useEffect(() => {
@@ -397,83 +401,391 @@ export const RideProvider = ({ children }) => {
     }
   };
   
-  // Haal alle opgeslagen kinderen op
-  const loadAllSavedChildren = async () => {
-    try {
-      return await rideService.loadAllSavedChildren();
-    } catch (err) {
-      console.error("Fout bij het laden van opgeslagen kinderen:", err);
-      setError("Er is een probleem opgetreden bij het ophalen van opgeslagen kinderen.");
-      return [];
-    }
-  };
-  
-  // Haal alle kinderen op uit de huidige rit
-  const getAllChildrenFromCurrentTrip = () => {
-    if (!currentTrip) return [];
-    return rideService.getAllChildrenFromCurrentTrip(currentTrip);
-  };
-  
-  // Voeg opgeslagen kinderen toe aan de huidige trip
-  const addSavedChildrenToCurrentTrip = async (newChildren, direction = 'heenreis') => {
-    if (!currentTrip) {
-      setError("Er is geen rit geselecteerd.");
-      return false;
+  // Functie om alle uitstapjes op te halen
+  const refreshTrips = useCallback(async () => {
+    // VOEG TOE: Wacht tot currentClass en currentClass.id beschikbaar zijn
+    if (!currentClass?.id) {
+      console.log("Wachten op currentClass.id voor refreshTrips");
+      setTrips([]); // Reset trips als er geen klas is
+      return () => {}; // Geef een lege opruimfunctie terug
     }
     
+    let unsubscribe = () => {}; // Initialiseer unsubscribe als lege functie
+
     try {
-      // Huidige data ophalen
-      const currentData = direction === 'heenreis' 
-        ? {...currentTrip.heenreis} 
-        : {...currentTrip.terugreis};
+      setError(null);
       
-      // Controleer of children array bestaat
-      if (!currentData.children) {
-        currentData.children = [];
-      }
+      // Query voor het ophalen van uitstapjes die bij de huidige klas horen
+      const tripsRef = collection(db, 'trips');
+      const q = query(tripsRef, where('classId', '==', currentClass.id));
       
-      // Check voor duplicaten en voeg toe
-      const existingIds = new Set(currentData.children.map(child => child.id.toString()));
-      const childrenToAdd = newChildren.filter(child => !existingIds.has(child.id.toString()));
+      // Luisteren naar real-time updates
+      // WIJZIG: Ken de return value van onSnapshot toe aan unsubscribe
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const tripsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Sorteer op datum (nieuwste eerst)
+        tripsData.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        setTrips(tripsData);
+        setLoading(false);
+      }, (err) => {
+        console.error('Fout bij ophalen uitstapjes:', err);
+        setError('Kon uitstapjes niet laden');
+        setLoading(false);
+      });
       
-      // Voeg toe aan bestaande kinderen
-      currentData.children = [...currentData.children, ...childrenToAdd];
-      
-      // Update de juiste data
-      if (direction === 'heenreis') {
-        return await updateHeenreisData(currentData);
-      } else {
-        return await updateTerugreisData(currentData);
-      }
+      // WIJZIG: Geef de unsubscribe functie terug
+      return unsubscribe;
     } catch (err) {
-      console.error(`Fout bij het toevoegen van kinderen aan ${direction}:`, err);
-      setError(`Er is een probleem opgetreden bij het toevoegen van kinderen aan de ${direction}.`);
-      return false;
+      console.error('Fout bij ophalen uitstapjes:', err);
+      setError('Kon uitstapjes niet laden');
+      setLoading(false);
+      // WIJZIG: Geef ook hier een lege opruimfunctie terug bij een fout
+      return () => {}; 
+    }
+  }, [currentClass]);
+
+  // Laad uitstapjes wanneer de klas verandert
+  useEffect(() => {
+    let unsubscribeTripsListener = () => {}; // Initialiseer met lege functie
+    
+    if (currentClass) {
+      // WIJZIG: Roep refreshTrips aan en sla de listener op
+      const setupListener = async () => {
+        unsubscribeTripsListener = await refreshTrips();
+      };
+      setupListener();
+    } else {
+      setTrips([]);
+      setCurrentTrip(null);
+    }
+    
+    // WIJZIG: Gebruik de opgeslagen listener in de cleanup
+    return () => {
+      if (unsubscribeTripsListener) {
+        unsubscribeTripsListener();
+      }
+    };
+  }, [currentClass, refreshTrips]);
+
+  // Functie om gegevens voor de heenreis op te halen
+  const loadHeenreisData = useCallback(async () => {
+    if (!currentTrip) return;
+    
+    try {
+      // Laad heenreis gegevens uit Firestore
+      const heenreisRef = collection(db, 'trips', currentTrip.id, 'heenreis');
+      
+      // Auto's ophalen
+      const carsQuery = query(collection(heenreisRef, 'cars'));
+      const carsSnapshot = await getDocs(carsQuery);
+      const carsData = carsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Kinderen ophalen
+      const childrenQuery = query(collection(heenreisRef, 'children'));
+      const childrenSnapshot = await getDocs(childrenQuery);
+      const childrenData = childrenSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      setHeenreisData({
+        cars: carsData,
+        children: childrenData
+      });
+      
+    } catch (err) {
+      console.error('Fout bij laden heenreis data:', err);
+      setError('Kon heenreis gegevens niet laden');
+    }
+  }, [currentTrip]);
+
+  // Functie om gegevens voor de terugreis op te halen
+  const loadTerugreisData = useCallback(async () => {
+    if (!currentTrip) return;
+    
+    try {
+      // Laad terugreis gegevens uit Firestore
+      const terugreisRef = collection(db, 'trips', currentTrip.id, 'terugreis');
+      
+      // Auto's ophalen
+      const carsQuery = query(collection(terugreisRef, 'cars'));
+      const carsSnapshot = await getDocs(carsQuery);
+      const carsData = carsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Kinderen ophalen
+      const childrenQuery = query(collection(terugreisRef, 'children'));
+      const childrenSnapshot = await getDocs(childrenQuery);
+      const childrenData = childrenSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      setTerugreisData({
+        cars: carsData,
+        children: childrenData
+      });
+      
+    } catch (err) {
+      console.error('Fout bij laden terugreis data:', err);
+      setError('Kon terugreis gegevens niet laden');
+    }
+  }, [currentTrip]);
+
+  // Effect voor het laden van heenreis en terugreis gegevens wanneer een uitstapje wordt geselecteerd
+  useEffect(() => {
+    if (currentTrip) {
+      loadHeenreisData();
+      loadTerugreisData();
+    } else {
+      // Reset gegevens wanneer er geen uitstapje is geselecteerd
+      setHeenreisData({ cars: [], children: [] });
+      setTerugreisData({ cars: [], children: [] });
+    }
+  }, [currentTrip, loadHeenreisData, loadTerugreisData]);
+
+  // Functie om heenreis gegevens op te slaan
+  const saveHeenreisData = async (data) => {
+    if (!currentTrip) return;
+    
+    try {
+      const heenreisRef = collection(db, 'trips', currentTrip.id, 'heenreis');
+      
+      // Update auto's
+      // Verwijder bestaande auto's
+      const carsQuery = query(collection(heenreisRef, 'cars'));
+      const carsSnapshot = await getDocs(carsQuery);
+      
+      const deletePromises = carsSnapshot.docs.map(doc => 
+        deleteDoc(doc.ref)
+      );
+      await Promise.all(deletePromises);
+      
+      // Voeg nieuwe auto's toe
+      const addCarsPromises = data.cars.map(car => 
+        addDoc(collection(heenreisRef, 'cars'), car)
+      );
+      await Promise.all(addCarsPromises);
+      
+      // Update kinderen
+      // Verwijder bestaande kinderen
+      const childrenQuery = query(collection(heenreisRef, 'children'));
+      const childrenSnapshot = await getDocs(childrenQuery);
+      
+      const deleteChildrenPromises = childrenSnapshot.docs.map(doc => 
+        deleteDoc(doc.ref)
+      );
+      await Promise.all(deleteChildrenPromises);
+      
+      // Voeg nieuwe kinderen toe
+      const addChildrenPromises = data.children.map(child => 
+        addDoc(collection(heenreisRef, 'children'), child)
+      );
+      await Promise.all(addChildrenPromises);
+      
+      // Update lokale state
+      setHeenreisData(data);
+      
+    } catch (err) {
+      console.error('Fout bij opslaan heenreis data:', err);
+      setError('Kon heenreis gegevens niet opslaan');
     }
   };
-  
-  // Context value
-  const value = {
-    currentTrip,
+
+  // Functie om terugreis gegevens op te slaan
+  const saveTerugreisData = async (data) => {
+    if (!currentTrip) return;
+    
+    try {
+      const terugreisRef = collection(db, 'trips', currentTrip.id, 'terugreis');
+      
+      // Update auto's
+      // Verwijder bestaande auto's
+      const carsQuery = query(collection(terugreisRef, 'cars'));
+      const carsSnapshot = await getDocs(carsQuery);
+      
+      const deletePromises = carsSnapshot.docs.map(doc => 
+        deleteDoc(doc.ref)
+      );
+      await Promise.all(deletePromises);
+      
+      // Voeg nieuwe auto's toe
+      const addCarsPromises = data.cars.map(car => 
+        addDoc(collection(terugreisRef, 'cars'), car)
+      );
+      await Promise.all(addCarsPromises);
+      
+      // Update kinderen
+      // Verwijder bestaande kinderen
+      const childrenQuery = query(collection(terugreisRef, 'children'));
+      const childrenSnapshot = await getDocs(childrenQuery);
+      
+      const deleteChildrenPromises = childrenSnapshot.docs.map(doc => 
+        deleteDoc(doc.ref)
+      );
+      await Promise.all(deleteChildrenPromises);
+      
+      // Voeg nieuwe kinderen toe
+      const addChildrenPromises = data.children.map(child => 
+        addDoc(collection(terugreisRef, 'children'), child)
+      );
+      await Promise.all(addChildrenPromises);
+      
+      // Update lokale state
+      setTerugreisData(data);
+      
+    } catch (err) {
+      console.error('Fout bij opslaan terugreis data:', err);
+      setError('Kon terugreis gegevens niet opslaan');
+    }
+  };
+
+  // Functie om alle opgeslagen kinderen te laden
+  const loadAllSavedChildren = useCallback(async () => {
+    if (!currentClass) return [];
+    
+    try {
+      // Haal kinderen op van alle trips in deze klas
+      const allChildren = [];
+      const processedNames = new Set(); // Bijhouden van namen die al zijn toegevoegd
+      
+      // Loop door alle trips
+      for (const trip of trips) {
+        // Heenreis kinderen ophalen
+        const heenreisRef = collection(db, 'trips', trip.id, 'heenreis');
+        const childrenQuery = query(collection(heenreisRef, 'children'));
+        const childrenSnapshot = await getDocs(childrenQuery);
+        
+        childrenSnapshot.docs.forEach(doc => {
+          const child = doc.data();
+          if (child.name && !processedNames.has(child.name)) {
+            allChildren.push(child);
+            processedNames.add(child.name);
+          }
+        });
+        
+        // Terugreis kinderen ophalen
+        const terugreisRef = collection(db, 'trips', trip.id, 'terugreis');
+        const terugreisChildrenQuery = query(collection(terugreisRef, 'children'));
+        const terugreisChildrenSnapshot = await getDocs(terugreisChildrenQuery);
+        
+        terugreisChildrenSnapshot.docs.forEach(doc => {
+          const child = doc.data();
+          if (child.name && !processedNames.has(child.name)) {
+            allChildren.push(child);
+            processedNames.add(child.name);
+          }
+        });
+      }
+      
+      return allChildren;
+    } catch (err) {
+      console.error('Fout bij ophalen opgeslagen kinderen:', err);
+      return [];
+    }
+  }, [currentClass, trips]);
+
+  // Functie om alle kinderen van het huidige uitstapje op te halen
+  const getAllChildrenFromCurrentTrip = () => {
+    const allCurrentTripChildren = [];
+    const processedNames = new Set(); // Bijhouden van namen die al zijn toegevoegd
+    
+    // Voeg kinderen van heenreis toe
+    heenreisData.children.forEach(child => {
+      if (child.name && !processedNames.has(child.name)) {
+        allCurrentTripChildren.push(child);
+        processedNames.add(child.name);
+      }
+    });
+    
+    // Voeg kinderen van terugreis toe die nog niet zijn toegevoegd
+    terugreisData.children.forEach(child => {
+      if (child.name && !processedNames.has(child.name)) {
+        allCurrentTripChildren.push(child);
+        processedNames.add(child.name);
+      }
+    });
+    
+    return allCurrentTripChildren;
+  };
+
+  // Functie om opgeslagen kinderen toe te voegen aan het huidige uitstapje
+  const addSavedChildrenToCurrentTrip = async (savedChildren) => {
+    if (!currentTrip) return;
+    
+    // Voeg kinderen toe aan heenreis
+    const currentHeenreisChildren = [...heenreisData.children];
+    const currentHeenreisNames = new Set(currentHeenreisChildren.map(c => c.name));
+    
+    // Filter kinderen die nog niet in de heenreis zitten
+    const newHeenreisChildren = savedChildren.filter(child => 
+      !currentHeenreisNames.has(child.name)
+    ).map(child => ({
+      ...child,
+      id: child.id || Math.random().toString(36).substr(2, 9),
+      carId: null
+    }));
+    
+    // Update heenreis data
+    const updatedHeenreisData = {
+      ...heenreisData,
+      children: [...currentHeenreisChildren, ...newHeenreisChildren]
+    };
+    await saveHeenreisData(updatedHeenreisData);
+    
+    // Voeg kinderen toe aan terugreis
+    const currentTerugreisChildren = [...terugreisData.children];
+    const currentTerugreisNames = new Set(currentTerugreisChildren.map(c => c.name));
+    
+    // Filter kinderen die nog niet in de terugreis zitten
+    const newTerugreisChildren = savedChildren.filter(child => 
+      !currentTerugreisNames.has(child.name)
+    ).map(child => ({
+      ...child,
+      id: child.id || Math.random().toString(36).substr(2, 9),
+      carId: null
+    }));
+    
+    // Update terugreis data
+    const updatedTerugreisData = {
+      ...terugreisData,
+      children: [...currentTerugreisChildren, ...newTerugreisChildren]
+    };
+    await saveTerugreisData(updatedTerugreisData);
+  };
+
+  // Contextwaarde die beschikbaar wordt gesteld
+  const contextValue = {
     trips,
+    refreshTrips,
+    currentTrip,
+    setCurrentTrip,
     loading,
     error,
     heenreisData,
     terugreisData,
-    activeUsers,
-    loadTrips,
-    loadTrip,
-    createTrip,
-    updateTripInfo,
-    deleteTrip,
-    updateHeenreisData,
-    updateTerugreisData,
+    saveHeenreisData,
+    saveTerugreisData,
     loadAllSavedChildren,
     getAllChildrenFromCurrentTrip,
     addSavedChildrenToCurrentTrip
   };
-  
-  return <RideContext.Provider value={value}>{children}</RideContext.Provider>;
-};
+
+  return (
+    <RideContext.Provider value={contextValue}>
+      {children}
+    </RideContext.Provider>
+  );
+}
 
 export default RideContext; 

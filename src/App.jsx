@@ -8,15 +8,17 @@ import TerugreisPage from './pages/TerugreisPage';
 import TripsPage from './pages/TripsPage';
 import ManagePage from './pages/ManagePage';
 import { RideProvider } from './context/RideContext';
+import { ClassAuthProvider } from './context/ClassAuthContext';
+import { useClassAuthContext } from './context/ClassAuthContext';
+import CreateClassPage from './pages/CreateClassPage';
 import { AuthProvider } from './context/AuthContext';
-import { useAuthContext } from './context/AuthContext';
 
 // Wrapper voor beschermde routes
 const ProtectedRoute = () => {
-  const { user, loading } = useAuthContext();
+  const { currentUser, isPending } = useClassAuthContext();
 
   // Toon laadstatus als authenticatiestatus nog wordt geladen
-  if (loading) {
+  if (isPending) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-xl">Laden...</div>
@@ -25,7 +27,7 @@ const ProtectedRoute = () => {
   }
 
   // Redirect naar login als niet ingelogd
-  if (!user) {
+  if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
 
@@ -39,6 +41,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/create-class" element={<CreateClassPage />} />
 
         {/* Dashboard routes wrapped in een protected route */}
         <Route element={<ProtectedRoute />}>
@@ -63,9 +66,11 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <RideProvider>
-        <AppRoutes />
-      </RideProvider>
+      <ClassAuthProvider>
+        <RideProvider>
+          <AppRoutes />
+        </RideProvider>
+      </ClassAuthProvider>
     </AuthProvider>
   );
 }

@@ -3,188 +3,231 @@ import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useRide } from '../context/RideContext';
 import { useAuthContext } from '../context/AuthContext';
 import '../assets/striks-gradients.css';
+import { FiHome, FiArrowRight, FiArrowLeft, FiSettings, FiUsers, FiLogOut } from 'react-icons/fi';
+import { useClassAuthContext } from '../context/ClassAuthContext';
 
 // Logo import
 import StriksLogo from '../assets/striks-logo.png';
 
 const DashboardLayout = () => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { currentUser, logout } = useAuthContext();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { currentUser, currentClass, onlineUsers, logout } = useClassAuthContext();
   const { currentTrip, loading } = useRide();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const NavLink = ({ to, children }) => {
-    const isActive = location.pathname === to;
-    return (
-      <Link
-        to={to}
-        className={`${
-          isActive
-            ? 'bg-striksTurquoise text-white font-medium'
-            : 'text-gray-700 hover:bg-striksLight'
-        } px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200`}
-      >
-        {children}
-      </Link>
-    );
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      console.log('Logged out successfully');
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout failed', error);
-    }
+  // Eenvoudige checks voor actieve route
+  const isActive = (path) => {
+    return location.pathname === path ? 'bg-striksMarine text-white' : 'text-striksMarine hover:bg-striksTurquoise/10';
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-white">
-      <header className="bg-gradient-primary shadow-md">
-        <div className="mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
+    <div className="min-h-screen bg-striksLight flex flex-col">
+      {/* Hoofdnavigatie */}
+      <header className="bg-white shadow-md">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo */}
             <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <img className="h-10 w-auto" src={StriksLogo} alt="AutoMaatje" />
-              </div>
-              <div className="hidden md:block ml-10">
-                <div className="flex space-x-4">
-                  <NavLink to="/trips">Trips</NavLink>
-                  {currentTrip && (
-                    <>
-                      <NavLink to="/heenreis">Heenreis</NavLink>
-                      <NavLink to="/terugreis">Terugreis</NavLink>
-                      <NavLink to="/manage">Beheren</NavLink>
-                    </>
-                  )}
-                </div>
-              </div>
+              <Link to="/" className="flex items-center">
+                <img
+                  className="h-8 w-auto mr-3"
+                  src={StriksLogo}
+                  alt="Striks Logo"
+                />
+                <span className="font-semibold text-xl text-striksMarine">AutoMaatje</span>
+              </Link>
             </div>
+            
+            {/* Klasinformatie en gebruiker */}
             <div className="hidden md:block">
               <div className="flex items-center">
-                {currentUser && (
-                  <div className="flex items-center space-x-4">
-                    <span className="text-white text-sm font-medium">
-                      {currentUser.email}
-                    </span>
-                    <button
-                      onClick={handleLogout}
-                      className="bg-striksRose hover:bg-striksPurple text-white px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200"
-                    >
-                      Uitloggen
-                    </button>
-                  </div>
-                )}
+                <div className="text-right mr-4">
+                  <p className="text-sm font-medium text-gray-700">{currentUser?.name}</p>
+                  <p className="text-xs text-gray-500">{currentClass?.name}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="ml-4 p-2 rounded-full text-gray-600 hover:text-gray-900 focus:outline-none"
+                >
+                  <FiLogOut className="h-5 w-5" />
+                </button>
               </div>
             </div>
-            <div className="md:hidden flex items-center">
+            
+            {/* Hamburger menu voor mobiel */}
+            <div className="md:hidden">
               <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="text-white hover:text-striksTurquoise focus:outline-none"
+                className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-gray-900 hover:bg-gray-100 focus:outline-none"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
               >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {mobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
+                <svg
+                  className="h-6 w-6"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d={isMenuOpen ? 'M6 18L18 6M6 6l12 12' : 'M4 6h16M4 12h16M4 18h16'}
+                  />
                 </svg>
               </button>
             </div>
           </div>
         </div>
-
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-white shadow-lg">
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-200">
+        
+        {/* Mobiel menu */}
+        {isMenuOpen && (
+          <div className="md:hidden bg-white border-t border-gray-200">
+            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
               <Link
                 to="/trips"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-striksLight"
-                onClick={() => setMobileMenuOpen(false)}
+                className={`${isActive('/trips')} block px-3 py-2 rounded-md text-base font-medium`}
+                onClick={() => setIsMenuOpen(false)}
               >
-                Trips
+                <div className="flex items-center">
+                  <FiHome className="mr-3" />
+                  Ritten
+                </div>
               </Link>
-              {currentTrip && (
-                <>
-                  <Link
-                    to="/heenreis"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-striksLight"
-                    onClick={() => setMobileMenuOpen(false)}
+              <Link
+                to="/heenreis"
+                className={`${isActive('/heenreis')} block px-3 py-2 rounded-md text-base font-medium`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <div className="flex items-center">
+                  <FiArrowRight className="mr-3" />
+                  Heenreis
+                </div>
+              </Link>
+              <Link
+                to="/terugreis"
+                className={`${isActive('/terugreis')} block px-3 py-2 rounded-md text-base font-medium`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <div className="flex items-center">
+                  <FiArrowLeft className="mr-3" />
+                  Terugreis
+                </div>
+              </Link>
+              <Link
+                to="/manage"
+                className={`${isActive('/manage')} block px-3 py-2 rounded-md text-base font-medium`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <div className="flex items-center">
+                  <FiSettings className="mr-3" />
+                  Beheren
+                </div>
+              </Link>
+              
+              {/* Gebruikersinformatie */}
+              <div className="pt-4 pb-3 border-t border-gray-200">
+                <div className="flex items-center px-5">
+                  <div className="flex-shrink-0">
+                    <div className="h-10 w-10 rounded-full bg-striksMarine text-white flex items-center justify-center">
+                      {currentUser?.name?.charAt(0) || '?'}
+                    </div>
+                  </div>
+                  <div className="ml-3">
+                    <div className="text-base font-medium text-gray-800">{currentUser?.name}</div>
+                    <div className="text-sm font-medium text-gray-500">{currentClass?.name}</div>
+                  </div>
+                </div>
+                <div className="mt-3 px-2 space-y-1">
+                  <button
+                    onClick={() => { handleLogout(); setIsMenuOpen(false); }}
+                    className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-100"
                   >
-                    Heenreis
-                  </Link>
-                  <Link
-                    to="/terugreis"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-striksLight"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Terugreis
-                  </Link>
-                  <Link
-                    to="/manage"
-                    className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-striksLight"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Beheren
-                  </Link>
-                </>
-              )}
-              {currentUser && (
-                <button
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-striksLight"
-                >
-                  Uitloggen ({currentUser.email})
-                </button>
-              )}
+                    <div className="flex items-center">
+                      <FiLogOut className="mr-3" />
+                      Uitloggen
+                    </div>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </header>
 
-      <main className="flex-grow">
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-xl font-semibold text-gray-600">Loading...</div>
-          </div>
-        ) : (
-          <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-            {currentTrip ? (
-              <div className="mb-6 px-4 sm:px-0">
-                <div className="border-b border-striksTurquoise pb-2 mb-4">
-                  <h1 className="text-2xl font-semibold text-striksMarine">
-                    {currentTrip.name} - {new Date(currentTrip.date).toLocaleDateString()}
-                  </h1>
-                  <p className="text-sm text-gray-600">
-                    Bestemming: {currentTrip.destination || 'Niet opgegeven'}
-                  </p>
+      {/* Main content */}
+      <div className="flex flex-1">
+        {/* Zijnavigatie (verborgen op mobiel) */}
+        <aside className="hidden md:flex md:flex-shrink-0 bg-white shadow-md">
+          <div className="flex flex-col w-64">
+            <nav className="flex-1 px-2 py-4 space-y-1">
+              <Link
+                to="/trips"
+                className={`${isActive('/trips')} px-3 py-2 rounded-md text-base font-medium flex items-center`}
+              >
+                <FiHome className="mr-3" />
+                Ritten
+              </Link>
+              <Link
+                to="/heenreis"
+                className={`${isActive('/heenreis')} px-3 py-2 rounded-md text-base font-medium flex items-center`}
+              >
+                <FiArrowRight className="mr-3" />
+                Heenreis
+              </Link>
+              <Link
+                to="/terugreis"
+                className={`${isActive('/terugreis')} px-3 py-2 rounded-md text-base font-medium flex items-center`}
+              >
+                <FiArrowLeft className="mr-3" />
+                Terugreis
+              </Link>
+              <Link
+                to="/manage"
+                className={`${isActive('/manage')} px-3 py-2 rounded-md text-base font-medium flex items-center`}
+              >
+                <FiSettings className="mr-3" />
+                Beheren
+              </Link>
+            </nav>
+            
+            {/* Online gebruikers */}
+            <div className="p-4 border-t border-gray-200">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <div className="flex items-center">
+                  <FiUsers className="mr-2" />
+                  Online Gebruikers
                 </div>
+              </h3>
+              <div className="mt-3 max-h-32 overflow-y-auto">
+                {onlineUsers.length > 0 ? (
+                  <ul className="space-y-2">
+                    {onlineUsers.map(user => (
+                      <li key={user.id} className="flex items-center">
+                        <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div>
+                        <span className="text-sm text-gray-600">{user.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-500">Geen andere gebruikers online</p>
+                )}
               </div>
-            ) : location.pathname !== '/trips' ? (
-              <div className="bg-striksLight p-4 rounded-md shadow-sm mb-6">
-                <p className="text-striksMarine">
-                  Selecteer eerst een trip op de <Link to="/trips" className="text-striksRose hover:underline">Trips pagina</Link>.
-                </p>
-              </div>
-            ) : null}
-            <Outlet />
+            </div>
           </div>
-        )}
-      </main>
+        </aside>
 
-      <footer className="bg-striksMarine py-4">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="text-center text-sm text-white">
-            &copy; {new Date().getFullYear()} AutoMaatje - Een product van Striks AI Consulting
-          </p>
-        </div>
-      </footer>
+        {/* Pagina-inhoud */}
+        <main className="flex-1 overflow-y-auto bg-striksLight p-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 };
