@@ -1,32 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthContext } from '../context/AuthContext';
+import { useClassAuthContext } from '../context/ClassAuthContext';
 import StriksLogo from '../assets/striks-logo.png';
-// TODO: Import authentication functions from Firebase setup
 
 function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [className, setClassName] = useState('');
+  const [classCode, setClassCode] = useState('');
+  const [userName, setUserName] = useState('');
   const [loginError, setLoginError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showCreateClassLink, setShowCreateClassLink] = useState(false);
   
   const navigate = useNavigate();
-  const { login, user, loading, error } = useAuthContext();
+  const { currentUser, isPending, error, login } = useClassAuthContext();
 
   // Als gebruiker is ingelogd, doorsturen naar dashboard
   useEffect(() => {
-    if (user) {
+    if (currentUser) {
       navigate('/');
     }
-  }, [user, navigate]);
+  }, [currentUser, navigate]);
+
+  // Toon de link naar de "klas aanmaken" pagina na 3 seconden
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowCreateClassLink(true);
+    }, 3000);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoginError(null);
     setIsLoading(true);
     
+    // Eenvoudige validatie
+    if (!className || !classCode || !userName) {
+      setLoginError('Vul alle velden in');
+      setIsLoading(false);
+      return;
+    }
+    
     try {
-      await login(email, password);
+      await login(className, classCode, userName);
       // Na succesvol inloggen stuurt useEffect ons door naar dashboard
     } catch (err) {
       setLoginError(err.message || 'Inloggen mislukt');
@@ -35,7 +52,7 @@ function LoginPage() {
   };
 
   // Toon een eenvoudige laadstatus als de auth state wordt geladen
-  if (loading) {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-striksLight flex items-center justify-center">
         <div className="text-xl text-striksMarine">Laden...</div>
@@ -66,40 +83,56 @@ function LoginPage() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md -space-y-px">
             <div className="mb-4">
-              <label htmlFor="email-address" className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+              <label htmlFor="class-name" className="block text-sm font-medium text-gray-700 mb-1">
+                Klas
               </label>
               <input
-                id="email-address"
-                name="email"
-                type="email"
+                id="class-name"
+                name="className"
+                type="text"
                 required
                 className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-striksRose focus:border-striksRose focus:z-10 sm:text-sm"
-                placeholder="Uw emailadres"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Voer uw klasnaam in"
+                value={className}
+                onChange={(e) => setClassName(e.target.value)}
+                disabled={isLoading}
+              />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="class-code" className="block text-sm font-medium text-gray-700 mb-1">
+                Code
+              </label>
+              <input
+                id="class-code"
+                name="classCode"
+                type="text"
+                required
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-striksRose focus:border-striksRose focus:z-10 sm:text-sm"
+                placeholder="Voer de toegangscode in"
+                value={classCode}
+                onChange={(e) => setClassCode(e.target.value)}
                 disabled={isLoading}
               />
             </div>
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Wachtwoord
+              <label htmlFor="user-name" className="block text-sm font-medium text-gray-700 mb-1">
+                Uw naam
               </label>
               <input
-                id="password"
-                name="password"
-                type="password"
+                id="user-name"
+                name="userName"
+                type="text"
                 required
                 className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-striksRose focus:border-striksRose focus:z-10 sm:text-sm"
-                placeholder="Uw wachtwoord"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Voer uw naam in"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
                 disabled={isLoading}
               />
             </div>
           </div>
 
-          <div>
+          <div className="mt-6">
             <button
               type="submit"
               className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-striksMarine hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-striksRose ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
@@ -109,23 +142,24 @@ function LoginPage() {
             </button>
           </div>
           
-          {/* Link voor test account */}
+          {/* Link voor voorbeeld inlog */}
           <div className="text-center text-sm mt-6 p-3 bg-striksLight rounded-md">
             <p className="text-gray-600 font-medium">
-              Test accounts: <br />
-              Email: test@example.com <br />
-              Wachtwoord: test123
+              Voorbeeld:<br />
+              Klas: Groep 8<br />
+              Code: ABC123<br />
+              Naam: [Uw naam]
             </p>
           </div>
           
-          <div className="text-center text-sm mt-4">
-            <p className="text-gray-600">
-              Nog geen account?{' '}
-              <Link to="/register" className="font-medium text-striksRose hover:text-striksRose hover:underline">
-                Registreer
+          {/* Link naar klas aanmaken pagina (onopvallend) */}
+          {showCreateClassLink && (
+            <div className="text-center text-xs mt-4 opacity-60 hover:opacity-100 transition-opacity">
+              <Link to="/create-class" className="text-striksRose hover:text-striksRose hover:underline">
+                Nieuwe klas aanmaken
               </Link>
-            </p>
-          </div>
+            </div>
+          )}
         </form>
       </div>
     </div>
