@@ -1,33 +1,17 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
-import Login from './components/Login';
-import Register from './components/Register';
-import Home from './components/Home';
-import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './context/AuthContext';
 
 function App() {
-  // Bepaal de basename voor GitHub Pages
-  // Bij lokale ontwikkeling is dit leeg, bij GitHub Pages is dit /AutoMaatje
-  const basename = process.env.NODE_ENV === 'production' ? '/AutoMaatje' : '';
-  
   return (
-    <AuthProvider>
-      <Router basename={basename}>
-        <div className="App">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route element={<ProtectedRoute />}>
-              <Route path="/" element={<Home />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </div>
-      </Router>
-    </AuthProvider>
+    <div className="App">
+      <header className="App-header">
+        <h1>AutoMaatje</h1>
+        <p>
+          Welkom bij onze app!
+        </p>
+      </header>
+    </div>
   );
 }
 
-export default App;
+export default App; 
