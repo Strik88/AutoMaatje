@@ -24,7 +24,18 @@ jobs:
           node-version: 16
           
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm install react-router-dom @types/react-router-dom firebase
+        
+      - name: Debug directory
+        run: |
+          echo "Files in src directory:"
+          ls -la src/
+          echo "Files in src/components directory:"
+          ls -la src/components/
+          echo "Files in src/context directory:"
+          ls -la src/context/
         
       - name: Build project
         run: npm run build
