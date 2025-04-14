@@ -36,11 +36,16 @@ jobs:
           ls -la src/components/
           echo "Files in src/context directory:"
           ls -la src/context/
+          echo "Files in public directory:"
+          ls -la public/
         
       - name: Build project
         run: npm run build
         env:
           CI: false  # This prevents treating warnings as errors
+          
+      - name: Create .nojekyll file to bypass Jekyll
+        run: touch build/.nojekyll
           
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
