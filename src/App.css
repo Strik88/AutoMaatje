@@ -4,11 +4,19 @@
   --secondary-color: #2ecc71;
   --secondary-dark: #27ae60;
   --error-color: #e74c3c;
+  --warning-color: #f39c12;
+  --light-bg: #f5f5f5;
   --text-color: #333;
   --light-text: #777;
   --bg-color: #f5f5f5;
   --card-bg: #fff;
   --border-color: #ddd;
+  --admin-color: #9b59b6;
+  --admin-dark: #8e44ad;
+  --driver-color: #e67e22;
+  --driver-dark: #d35400;
+  --parent-color: #3498db;
+  --parent-dark: #2980b9;
 }
 
 body {
@@ -51,12 +59,14 @@ body {
   font-weight: 500;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 1rem;
+  background-color: white;
 }
 
 .login-button,
@@ -75,9 +85,19 @@ body {
 }
 
 .login-button:hover,
-.register-button:hover,
-.logout-button:hover {
+.register-button:hover {
   background-color: var(--primary-dark);
+}
+
+.logout-button {
+  width: auto;
+  margin-top: 0;
+  background-color: var(--light-text);
+  margin-left: 1rem;
+}
+
+.logout-button:hover {
+  background-color: var(--text-color);
 }
 
 .link-button {
@@ -97,40 +117,175 @@ body {
 
 /* Home component */
 .home-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.app-header h1 {
+  margin: 0;
+  color: var(--primary-color);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+}
+
+.role-badge {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin: 0 0.5rem;
+  text-transform: capitalize;
+}
+
+.role-badge.admin {
+  background-color: var(--admin-color);
+}
+
+.role-badge.driver {
+  background-color: var(--driver-color);
+}
+
+.role-badge.parent {
+  background-color: var(--parent-color);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.2rem;
+}
+
+/* Dashboard */
+.dashboard-container {
+  padding: 1rem 0;
+}
+
+.dashboard {
   background-color: var(--card-bg);
   border-radius: 8px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
   padding: 2rem;
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
-  text-align: left;
+  margin-bottom: 2rem;
 }
 
-.home-container h1 {
+.dashboard h2 {
   margin-top: 0;
-  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.content {
-  margin: 2rem 0;
+.dashboard-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
 }
 
-.logout-button {
-  margin-top: 2rem;
-  width: auto;
-  background-color: var(--secondary-color);
+.dashboard-card {
+  background-color: var(--light-bg);
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.logout-button:hover {
-  background-color: var(--secondary-dark);
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-card h3 {
+  margin-top: 0;
+  color: var(--primary-dark);
+}
+
+.dashboard-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 1rem;
+}
+
+.dashboard-button:hover {
+  background-color: var(--primary-dark);
+}
+
+.admin-dashboard h2,
+.admin-dashboard .dashboard-card h3 {
+  color: var(--admin-color);
+}
+
+.admin-dashboard .dashboard-button {
+  background-color: var(--admin-color);
+}
+
+.admin-dashboard .dashboard-button:hover {
+  background-color: var(--admin-dark);
+}
+
+.driver-dashboard h2,
+.driver-dashboard .dashboard-card h3 {
+  color: var(--driver-color);
+}
+
+.driver-dashboard .dashboard-button {
+  background-color: var(--driver-color);
+}
+
+.driver-dashboard .dashboard-button:hover {
+  background-color: var(--driver-dark);
 }
 
 /* Responsive styling */
+@media (max-width: 768px) {
+  .dashboard-content {
+    grid-template-columns: 1fr;
+  }
+  
+  .app-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .user-info {
+    margin-top: 1rem;
+    justify-content: center;
+  }
+
+  .logout-button {
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+}
+
 @media (max-width: 500px) {
   .login-container,
   .register-container,
-  .home-container {
+  .home-container,
+  .dashboard {
     width: 90%;
     padding: 1.5rem;
   }
