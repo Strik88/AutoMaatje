@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/AutoMaatje/static/css/main.974783b2.css",
-    "main.js": "/AutoMaatje/static/js/main.12320ba7.js",
+    "main.css": "/AutoMaatje/static/css/main.34b2531b.css",
+    "main.js": "/AutoMaatje/static/js/main.e7ba3201.js",
     "index.html": "/AutoMaatje/index.html",
-    "main.974783b2.css.map": "/AutoMaatje/static/css/main.974783b2.css.map",
-    "main.12320ba7.js.map": "/AutoMaatje/static/js/main.12320ba7.js.map"
+    "main.34b2531b.css.map": "/AutoMaatje/static/css/main.34b2531b.css.map",
+    "main.e7ba3201.js.map": "/AutoMaatje/static/js/main.e7ba3201.js.map"
   },
   "entrypoints": [
-    "static/css/main.974783b2.css",
-    "static/js/main.12320ba7.js"
+    "static/css/main.34b2531b.css",
+    "static/js/main.e7ba3201.js"
   ]
 }
