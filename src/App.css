@@ -69,6 +69,13 @@ body {
   background-color: white;
 }
 
+.form-group small {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--light-text);
+}
+
 .login-button,
 .register-button,
 .logout-button {
@@ -87,6 +94,12 @@ body {
 .login-button:hover,
 .register-button:hover {
   background-color: var(--primary-dark);
+}
+
+.login-button:disabled,
+.register-button:disabled {
+  background-color: var(--light-text);
+  cursor: not-allowed;
 }
 
 .logout-button {
@@ -113,6 +126,14 @@ body {
 .error {
   color: var(--error-color);
   margin-bottom: 1rem;
+}
+
+.firebase-status {
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  background-color: var(--light-bg);
+  border-left: 4px solid var(--primary-color);
 }
 
 /* Home component */
